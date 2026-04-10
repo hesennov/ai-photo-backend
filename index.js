@@ -6,7 +6,7 @@ const Replicate = require("replicate");
 
 const app = express();
 app.use(cors({
-  origin: ['https://gokturkai.com', 'https://gokturkaicom.netlify.app','https://www.gokturkai.com', 'http://localhost:5173'],
+  origin: ['https://gokturkai.com', 'https://gokturkaicom.netlify.app', 'https://www.gokturkai.com', 'http://localhost:5173'],
   credentials: true,
 }));
 
@@ -23,6 +23,7 @@ const PLANS = {
   price_1TKkbQDuBL2btSu6e6uMapPw: { credits: 75, name: 'Pro' },
   price_1TKkbRDuBL2btSu6qomXuXqP: { credits: 200, name: 'Creator' },
 };
+
 // ⚠️ WEBHOOK — express.json'dan ÖNCE
 app.post('/webhook/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
@@ -38,15 +39,10 @@ app.post('/webhook/stripe', express.raw({ type: 'application/json' }), async (re
     const session = event.data.object;
     const userId = session.metadata.user_id;
     const credits = parseInt(session.metadata.credits);
-
     const { data: profile } = await supabase
       .from('profiles').select('credits').eq('id', userId).single();
-
     if (profile) {
-      await supabase
-        .from('profiles')
-        .update({ credits: profile.credits + credits })
-        .eq('id', userId);
+      await supabase.from('profiles').update({ credits: profile.credits + credits }).eq('id', userId);
       console.log(`✅ ${userId} kullanıcısına ${credits} kredi eklendi`);
     }
   }
@@ -111,7 +107,6 @@ app.post("/auth/login", async (req, res) => {
 app.get("/auth/me", authMiddleware, async (req, res) => {
   let { data: profile } = await supabase
     .from("profiles").select("*").eq("id", req.user.id).single();
-
   if (!profile) {
     const full_name = req.user.user_metadata?.full_name ?? req.user.email?.split('@')[0] ?? 'Kullanıcı';
     const { data: newProfile } = await supabase
@@ -120,7 +115,6 @@ app.get("/auth/me", authMiddleware, async (req, res) => {
       .select().single();
     profile = newProfile;
   }
-
   res.json({
     id: req.user.id, email: req.user.email,
     full_name: profile?.full_name, credits: profile?.credits ?? 0,
@@ -141,17 +135,17 @@ app.get("/templates", async (req, res) => {
 });
 
 app.post("/templates", authMiddleware, adminMiddleware, async (req, res) => {
-  const { name, category, prompt, image_url } = req.body;
+  const { name, category, subcategory, prompt, image_url } = req.body;
   const { data, error } = await supabase
-    .from("templates").insert({ name, category, prompt, image_url }).select().single();
+    .from("templates").insert({ name, category, subcategory, prompt, image_url }).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
 
 app.put("/templates/:id", authMiddleware, adminMiddleware, async (req, res) => {
-  const { name, category, prompt, image_url } = req.body;
+  const { name, category, subcategory, prompt, image_url } = req.body;
   const { data, error } = await supabase
-    .from("templates").update({ name, category, prompt, image_url })
+    .from("templates").update({ name, category, subcategory, prompt, image_url })
     .eq("id", req.params.id).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
@@ -227,16 +221,25 @@ app.get("/my-generations", authMiddleware, async (req, res) => {
   res.json(data);
 });
 
-///category
 app.get("/categories", async (req, res) => {
   const { data } = await supabase
     .from("templates")
-    .select("category")
-  
-  const categories = [...new Set(data?.map(t => t.category).filter(Boolean))]
-  res.json(categories)
-})
+    .select("category, subcategory")
 
+  const result = {}
+  data?.forEach(t => {
+    if (!t.category) return
+    if (!result[t.category]) result[t.category] = new Set()
+    if (t.subcategory) result[t.category].add(t.subcategory)
+  })
+
+  const categories = Object.entries(result).map(([cat, subs]) => ({
+    name: cat,
+    subcategories: [...subs],
+  }))
+
+  res.json(categories)
+});
 
 app.get("/stats", authMiddleware, adminMiddleware, async (req, res) => {
   const { count: totalTemplates } = await supabase
