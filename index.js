@@ -227,6 +227,17 @@ app.get("/my-generations", authMiddleware, async (req, res) => {
   res.json(data);
 });
 
+///category
+app.get("/categories", async (req, res) => {
+  const { data } = await supabase
+    .from("templates")
+    .select("category")
+  
+  const categories = [...new Set(data?.map(t => t.category).filter(Boolean))]
+  res.json(categories)
+})
+
+
 app.get("/stats", authMiddleware, adminMiddleware, async (req, res) => {
   const { count: totalTemplates } = await supabase
     .from("templates").select("*", { count: "exact", head: true });
