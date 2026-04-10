@@ -19,11 +19,10 @@ const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const PLANS = {
-  price_1TKXj4D1DtcsOeYDsAbFlFmW: { credits: 25, name: 'Starter' },
-  price_1TKXjdD1DtcsOeYD9CIpOcBf: { credits: 75, name: 'Pro' },
-  price_1TKXjzD1DtcsOeYDMBu4wlHm: { credits: 200, name: 'Creator' },
+  price_1TKkbPDuBL2btSu6jVpCyoKk: { credits: 25, name: 'Starter' },
+  price_1TKkbQDuBL2btSu6e6uMapPw: { credits: 75, name: 'Pro' },
+  price_1TKkbRDuBL2btSu6qomXuXqP: { credits: 200, name: 'Creator' },
 };
-
 // ⚠️ WEBHOOK — express.json'dan ÖNCE
 app.post('/webhook/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
