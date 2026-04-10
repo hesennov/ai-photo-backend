@@ -6,7 +6,7 @@ const Replicate = require("replicate");
 
 const app = express();
 app.use(cors({
-  origin: ['https://gokturkai.com', 'https://www.gokturkai.com', 'http://localhost:5173'],
+  origin: ['https://gokturkai.com', 'https://gokturkaicom.netlify.app','https://www.gokturkai.com', 'http://localhost:5173'],
   credentials: true,
 }));
 
