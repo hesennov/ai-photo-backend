@@ -16,6 +16,11 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY,
 );
 
+// const genAI = new GoogleGenAI({ 
+//   apiKey: process.env.GEMINI_API_KEY,
+//   apiVersion: 'v1alpha'
+
+// });
 const genAI = new GoogleGenAI({ 
   apiKey: process.env.GEMINI_API_KEY,
   apiVersion: 'v1alpha'
@@ -174,26 +179,48 @@ app.post("/generate", authMiddleware, async (req, res) => {
     if (templateError) return res.status(404).json({ error: "Template bulunamadı" });
 
     const promptText = `${template.prompt}. The person in the provided photo must appear in this scene. Keep their face, skin tone, and facial features exactly the same. Only change the background and environment.`;
-
-  const response = await genAI.models.generateContent({
-  model: "gemini-2.5-flash-image",
+const response = await genAI.models.generateContent({
+  // En güncel görsel üretim yeteneğine sahip model
+  model: "gemini-3-flash-image", 
   contents: [
     {
       parts: [
         {
           inlineData: {
             mimeType: "image/jpeg",
-            data: userPhotoBase64,
+            data: userPhotoBase64, // Referans olarak aldığım kendi fotoğrafın
           },
         },
-        { text: promptText },
+        { 
+          text: promptText // Yazdığın o detaylı Los Angeles/Camaro senaryosu
+        },
       ],
     },
   ],
   config: {
+    // Hem metin hem de görsel çıktısı alabilmek için gerekli ayar
     responseModalities: ["TEXT", "IMAGE"],
   },
 });
+//   const response = await genAI.models.generateContent({
+//   model: "gemini-2.5-flash-image",
+//   contents: [
+//     {
+//       parts: [
+//         {
+//           inlineData: {
+//             mimeType: "image/jpeg",
+//             data: userPhotoBase64,
+//           },
+//         },
+//         { text: promptText },
+//       ],
+//     },
+//   ],
+//   config: {
+//     responseModalities: ["TEXT", "IMAGE"],
+//   },
+// });
     const parts = response.candidates[0].content.parts;
     const imagePart = parts.find(p => p.inlineData);
 
