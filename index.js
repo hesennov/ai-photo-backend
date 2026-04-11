@@ -16,8 +16,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY,
 );
 
-const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
+const genAI = new GoogleGenAI({ 
+  apiKey: process.env.GEMINI_API_KEY,
+  apiVersion: 'v1alpha'
+});
 const PLANS = {
   price_1TKkbPDuBL2btSu6jVpCyoKk: { credits: 25, name: 'Starter' },
   price_1TKkbQDuBL2btSu6e6uMapPw: { credits: 75, name: 'Pro' },
@@ -173,26 +175,25 @@ app.post("/generate", authMiddleware, async (req, res) => {
 
     const promptText = `${template.prompt}. The person in the provided photo must appear in this scene. Keep their face, skin tone, and facial features exactly the same. Only change the background and environment.`;
 
-    const response = await genAI.models.generateContent({
-      model: "gemini-2.0-flash-exp",
-      contents: [
+  const response = await genAI.models.generateContent({
+  model: "gemini-2.5-flash-image",
+  contents: [
+    {
+      parts: [
         {
-          parts: [
-            {
-              inlineData: {
-                mimeType: "image/jpeg",
-                data: userPhotoBase64,
-              },
-            },
-            { text: promptText },
-          ],
+          inlineData: {
+            mimeType: "image/jpeg",
+            data: userPhotoBase64,
+          },
         },
+        { text: promptText },
       ],
-      config: {
-        responseModalities: ["TEXT", "IMAGE"],
-      },
-    });
-
+    },
+  ],
+  config: {
+    responseModalities: ["TEXT", "IMAGE"],
+  },
+});
     const parts = response.candidates[0].content.parts;
     const imagePart = parts.find(p => p.inlineData);
 
