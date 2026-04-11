@@ -181,7 +181,8 @@ app.post("/generate", authMiddleware, async (req, res) => {
     const promptText = `${template.prompt}. The person in the provided photo must appear in this scene. Keep their face, skin tone, and facial features exactly the same. Only change the background and environment.`;
 const response = await genAI.models.generateContent({
   // En güncel görsel üretim yeteneğine sahip model
-  model: "gemini-3-flash-image", 
+  model: "gemini-3.1-flash-image-preview", 
+  
   contents: [
     {
       parts: [
