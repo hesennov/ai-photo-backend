@@ -2,7 +2,8 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const { createClient } = require("@supabase/supabase-js");
-const Replicate = require("replicate");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
 app.use(cors({
@@ -15,14 +16,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY,
 );
 
-const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const PLANS = {
   price_1TKkbPDuBL2btSu6jVpCyoKk: { credits: 25, name: 'Starter' },
   price_1TKkbQDuBL2btSu6e6uMapPw: { credits: 75, name: 'Pro' },
   price_1TKkbRDuBL2btSu6qomXuXqP: { credits: 200, name: 'Creator' },
-  price_1TKqSFDuBL2btSu6kT0EFGh7 : {credits :10, name :"for test"}
+  price_1TKqSFDuBL2btSu6kT0EFGh7: { credits: 10, name: 'for test' }
 };
 
 // ⚠️ WEBHOOK — express.json'dan ÖNCE
@@ -161,6 +161,7 @@ app.delete("/templates/:id", authMiddleware, adminMiddleware, async (req, res) =
 app.post("/generate", authMiddleware, async (req, res) => {
   try {
     const { templateId, userPhotoBase64 } = req.body;
+
     const { data: profile } = await supabase
       .from("profiles").select("credits").eq("id", req.user.id).single();
     if (!profile || profile.credits < 1)
@@ -170,35 +171,38 @@ app.post("/generate", authMiddleware, async (req, res) => {
       .from("templates").select("*").eq("id", templateId).single();
     if (templateError) return res.status(404).json({ error: "Template bulunamadı" });
 
-    const fileName = `uploads/${Date.now()}.jpg`;
-    const buffer = Buffer.from(userPhotoBase64, "base64");
-    const { error: uploadError } = await supabase.storage
-      .from("user-uploads").upload(fileName, buffer, { contentType: "image/jpeg" });
-    if (uploadError)
-      return res.status(500).json({ error: "Fotoğraf yüklenemedi: " + uploadError.message });
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash-exp-image-generation",
+      generationConfig: { responseModalities: ["Text", "Image"] },
+    });
 
-    const { data: { publicUrl } } = supabase.storage.from("user-uploads").getPublicUrl(fileName);
+    const prompt = `${template.prompt}. The person in the provided photo must appear in this scene. Keep their face, skin tone, and facial features exactly the same. Only change the background and environment.`;
 
-    const output = await replicate.run(
-      "tencentarc/photomaker:ddfc2b08d209f9fa8c1eca692712918bd449f695dabb4a958da31802a9570fe4",
+    const result = await model.generateContent([
       {
-        input: {
-          prompt: template.prompt,
-          input_image: publicUrl,
-          style_name: "Photographic (Default)",
-          num_outputs: 1,
+        inlineData: {
+          mimeType: "image/jpeg",
+          data: userPhotoBase64,
         },
       },
-    );
+      { text: prompt },
+    ]);
 
-    const stream = output[0];
-    const chunks = [];
-    for await (const chunk of stream) { chunks.push(chunk); }
-    const resultBuffer = Buffer.concat(chunks);
+    const parts = result.response.candidates[0].content.parts;
+    const imagePart = parts.find(p => p.inlineData);
+
+    if (!imagePart) {
+      console.error('Gemini görsel döndürmedi:', JSON.stringify(result.response));
+      return res.status(500).json({ message: "Görsel üretilemedi, tekrar dene" });
+    }
+
+    const resultBuffer = Buffer.from(imagePart.inlineData.data, "base64");
 
     const resultFileName = `results/${Date.now()}.jpg`;
     await supabase.storage
-      .from("user-uploads").upload(resultFileName, resultBuffer, { contentType: "image/jpeg" });
+      .from("user-uploads")
+      .upload(resultFileName, resultBuffer, { contentType: "image/jpeg" });
+
     const { data: { publicUrl: resultUrl } } = supabase.storage
       .from("user-uploads").getPublicUrl(resultFileName);
 
@@ -223,23 +227,18 @@ app.get("/my-generations", authMiddleware, async (req, res) => {
 });
 
 app.get("/categories", async (req, res) => {
-  const { data } = await supabase
-    .from("templates")
-    .select("category, subcategory")
-
-  const result = {}
+  const { data } = await supabase.from("templates").select("category, subcategory");
+  const result = {};
   data?.forEach(t => {
-    if (!t.category) return
-    if (!result[t.category]) result[t.category] = new Set()
-    if (t.subcategory) result[t.category].add(t.subcategory)
-  })
-
+    if (!t.category) return;
+    if (!result[t.category]) result[t.category] = new Set();
+    if (t.subcategory) result[t.category].add(t.subcategory);
+  });
   const categories = Object.entries(result).map(([cat, subs]) => ({
     name: cat,
     subcategories: [...subs],
-  }))
-
-  res.json(categories)
+  }));
+  res.json(categories);
 });
 
 app.get("/stats", authMiddleware, adminMiddleware, async (req, res) => {
