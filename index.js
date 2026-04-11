@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const { createClient } = require("@supabase/supabase-js");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { GoogleGenAI } = require("@google/genai");
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
@@ -16,7 +16,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY,
 );
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const PLANS = {
   price_1TKkbPDuBL2btSu6jVpCyoKk: { credits: 25, name: 'Starter' },
@@ -171,28 +171,33 @@ app.post("/generate", authMiddleware, async (req, res) => {
       .from("templates").select("*").eq("id", templateId).single();
     if (templateError) return res.status(404).json({ error: "Template bulunamadı" });
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash-exp-image-generation",
-      generationConfig: { responseModalities: ["Text", "Image"] },
+    const promptText = `${template.prompt}. The person in the provided photo must appear in this scene. Keep their face, skin tone, and facial features exactly the same. Only change the background and environment.`;
+
+    const response = await genAI.models.generateContent({
+      model: "gemini-2.0-flash-exp",
+      contents: [
+        {
+          parts: [
+            {
+              inlineData: {
+                mimeType: "image/jpeg",
+                data: userPhotoBase64,
+              },
+            },
+            { text: promptText },
+          ],
+        },
+      ],
+      config: {
+        responseModalities: ["TEXT", "IMAGE"],
+      },
     });
 
-    const prompt = `${template.prompt}. The person in the provided photo must appear in this scene. Keep their face, skin tone, and facial features exactly the same. Only change the background and environment.`;
-
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          mimeType: "image/jpeg",
-          data: userPhotoBase64,
-        },
-      },
-      { text: prompt },
-    ]);
-
-    const parts = result.response.candidates[0].content.parts;
+    const parts = response.candidates[0].content.parts;
     const imagePart = parts.find(p => p.inlineData);
 
     if (!imagePart) {
-      console.error('Gemini görsel döndürmedi:', JSON.stringify(result.response));
+      console.error('Gemini görsel döndürmedi:', JSON.stringify(response));
       return res.status(500).json({ message: "Görsel üretilemedi, tekrar dene" });
     }
 
