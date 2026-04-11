@@ -22,6 +22,7 @@ const PLANS = {
   price_1TKkbPDuBL2btSu6jVpCyoKk: { credits: 25, name: 'Starter' },
   price_1TKkbQDuBL2btSu6e6uMapPw: { credits: 75, name: 'Pro' },
   price_1TKkbRDuBL2btSu6qomXuXqP: { credits: 200, name: 'Creator' },
+  price_1TKqSFDuBL2btSu6kT0EFGh7 : {credits :10, name :"for test"}
 };
 
 // ⚠️ WEBHOOK — express.json'dan ÖNCE
