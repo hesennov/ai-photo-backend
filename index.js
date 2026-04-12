@@ -180,8 +180,8 @@ app.post("/generate", authMiddleware, async (req, res) => {
 
     const promptText = `${template.prompt}. The person in the provided photo must appear in this scene. Keep their face, skin tone, and facial features exactly the same. Only change the background and environment.`;
 const response = await genAI.models.generateContent({
-  // En güncel görsel üretim yeteneğine sahip model
-  model: "gemini-3.1-flash-image-preview", 
+  // Kararlı ve hızlı olan Gemini 1.5 Flash modelini kullanıyoruz. 
+  model: "gemini-1.5-flash", 
   
   contents: [
     {
@@ -240,15 +240,30 @@ const response = await genAI.models.generateContent({
     const { data: { publicUrl: resultUrl } } = supabase.storage
       .from("user-uploads").getPublicUrl(resultFileName);
 
-    await supabase.from("profiles").update({ credits: profile.credits - 1 }).eq("id", req.user.id);
+    // Önce üretilen görseli kayda ekliyoruz
     await supabase.from("generations").insert({
       user_id: req.user.id, template_id: templateId, result_url: resultUrl,
     });
 
+    // Görsel kaydı başarılıysa krediyi düşüyoruz
+    const { error: creditError } = await supabase.from("profiles").update({ credits: profile.credits - 1 }).eq("id", req.user.id);
+    
+    if (creditError) {
+      console.error('Kredi düşürülürken hata oluştu:', creditError);
+    }
+
     res.json({ resultUrl });
   } catch (err) {
-    console.error('Generate hatası:', err);
-    return res.status(500).json({ message: 'Görsel üretilemedi, tekrar dene' });
+    console.error('Generate hatası detayları:', err);
+    let errorMessage = 'Görsel üretilemedi, lütfen tekrar deneyin';
+    
+    if (err.message?.includes('timeout') || err.code === 'UND_ERR_HEADERS_TIMEOUT') {
+      errorMessage = 'Yapay zeka yanıt vermedi (Zaman aşımı), lütfen birazdan tekrar deneyin';
+    } else if (err.message?.includes('fetch failed')) {
+      errorMessage = 'Sunucu bağlantı hatası, lütfen tekrar deneyin';
+    }
+
+    return res.status(500).json({ message: errorMessage });
   }
 });
 
