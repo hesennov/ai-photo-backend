@@ -136,10 +136,38 @@ app.post("/auth/logout", authMiddleware, async (req, res) => {
 });
 
 app.get("/templates", async (req, res) => {
-  const { data, error } = await supabase
-    .from("templates").select("*").order("created_at", { ascending: false });
+  const page = parseInt(req.query.page);
+  const limit = parseInt(req.query.limit);
+  const category = req.query.category;
+  const subcategory = req.query.subcategory;
+
+  let query = supabase.from("templates").select("*", { count: "exact" });
+  
+  if (category) query = query.eq("category", category);
+  if (subcategory) query = query.eq("subcategory", subcategory);
+
+  if (!isNaN(page) && !isNaN(limit)) {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+    query = query.range(from, to);
+  }
+
+  const { data, error, count } = await query.order("created_at", { ascending: false });
+
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+
+  if (!isNaN(page) && !isNaN(limit)) {
+    res.json({
+      data,
+      total: count,
+      page,
+      limit,
+      totalPages: Math.ceil((count || 0) / limit)
+    });
+  } else {
+    // Geriye dönük uyumluluk (Pagination olmadan tüm veriyi çekenler için)
+    res.json(data);
+  }
 });
 
 app.post("/templates", authMiddleware, adminMiddleware, async (req, res) => {
@@ -276,16 +304,25 @@ app.get("/my-generations", authMiddleware, async (req, res) => {
 });
 
 app.get("/categories", async (req, res) => {
-  const { data } = await supabase.from("templates").select("category, subcategory");
+  const { data } = await supabase.from("templates").select("category, subcategory, image_url");
   const result = {};
+  const categoryImages = {};
+  
   data?.forEach(t => {
     if (!t.category) return;
     if (!result[t.category]) result[t.category] = new Set();
     if (t.subcategory) result[t.category].add(t.subcategory);
+    
+    // Rastgele veya ilk bulduğu resmi kategori resmi olarak ayarla
+    if (t.image_url && !categoryImages[t.category]) {
+      categoryImages[t.category] = t.image_url;
+    }
   });
+  
   const categories = Object.entries(result).map(([cat, subs]) => ({
     name: cat,
     subcategories: [...subs],
+    image_url: categoryImages[cat] || null
   }));
   res.json(categories);
 });
