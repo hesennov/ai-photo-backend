@@ -279,7 +279,14 @@ const response = await genAI.models.generateContent({
       return res.status(500).json({ message: "Görsel üretilemedi, tekrar dene" });
     }
 
-    const resultBuffer = Buffer.from(imagePart.inlineData.data, "base64");
+    const rawBuffer = Buffer.from(imagePart.inlineData.data, "base64");
+    
+    // Supabase kota/alan limitleri için görseli sıkıştır (Ortalama %70-80 daha az yer kaplayacak)
+    const sharp = require('sharp');
+    const resultBuffer = await sharp(rawBuffer)
+      .resize({ width: 1200, withoutEnlargement: true }) // Çok büyükse 1200px'e düşür, küçükse dokunma
+      .jpeg({ quality: 80, progressive: true }) // Yüksek görünüm kalitesi ama düşük dosya boyutu
+      .toBuffer();
 
     const resultFileName = `results/${Date.now()}.jpg`;
     await supabase.storage
