@@ -13,8 +13,17 @@ app.use(cors({
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY,
+  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY,
 );
+
+// Yardımcı fonksiyon: RLS'i güvenli geçmek için user'ın tokeniyle sorgu atar
+const getUserSupabase = (token) => {
+  return createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY,
+    { global: { headers: { Authorization: `Bearer ${token}` } } }
+  );
+};
 
 // const genAI = new GoogleGenAI({ 
 //   apiKey: process.env.GEMINI_API_KEY,
@@ -99,8 +108,11 @@ app.post("/auth/login", async (req, res) => {
   const { email, password } = req.body;
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return res.status(400).json({ message: error.message });
-  const { data: profile } = await supabase
+  
+  const userClient = getUserSupabase(data.session.access_token);
+  const { data: profile } = await userClient
     .from("profiles").select("*").eq("id", data.user.id).single();
+    
   res.json({
     user: {
       id: data.user.id, email: data.user.email,
@@ -113,16 +125,21 @@ app.post("/auth/login", async (req, res) => {
 });
 
 app.get("/auth/me", authMiddleware, async (req, res) => {
-  let { data: profile } = await supabase
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const userClient = getUserSupabase(token);
+  
+  let { data: profile } = await userClient
     .from("profiles").select("*").eq("id", req.user.id).single();
+    
   if (!profile) {
     const full_name = req.user.user_metadata?.full_name ?? req.user.email?.split('@')[0] ?? 'Kullanıcı';
-    const { data: newProfile } = await supabase
+    const { data: newProfile } = await userClient
       .from("profiles")
       .insert({ id: req.user.id, email: req.user.email, full_name, credits: 3, is_admin: false })
       .select().single();
     profile = newProfile;
   }
+  
   res.json({
     id: req.user.id, email: req.user.email,
     full_name: profile?.full_name, credits: profile?.credits ?? 0,
