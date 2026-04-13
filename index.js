@@ -3,17 +3,6 @@ const cors = require("cors");
 require("dotenv").config();
 const { createClient } = require("@supabase/supabase-js");
 const { GoogleGenAI } = require("@google/genai");
-const { setGlobalDispatcher, Agent } = require("undici");
-
-// Gemini görsel üretiminde zaman aşımını önlemek için global fetch timeout süresini uzatıyoruz (5 dakika)
-setGlobalDispatcher(
-  new Agent({
-    headersTimeout: 300000, // 5 dakika beklenecek
-    keepAliveTimeout: 300000,
-    connectTimeout: 60000,
-  })
-);
-
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
@@ -43,7 +32,8 @@ const getUserSupabase = (token) => {
 // });
 const genAI = new GoogleGenAI({ 
   apiKey: process.env.GEMINI_API_KEY,
-  apiVersion: 'v1alpha'
+  apiVersion: 'v1alpha',
+  httpOptions: { timeout: 300000 } // 5 dakika (Network timeout engellemek için)
 });
 const PLANS = {
   price_1TKkbPDuBL2btSu6jVpCyoKk: { credits: 25, name: 'Starter' },
