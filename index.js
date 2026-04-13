@@ -213,8 +213,12 @@ app.delete("/templates/:id", authMiddleware, adminMiddleware, async (req, res) =
 app.post("/generate", authMiddleware, async (req, res) => {
   try {
     const { templateId, userPhotoBase64 } = req.body;
+    
+    // Auth token ile kullanıcıya özel supabase client
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    const userClient = getUserSupabase(token);
 
-    const { data: profile } = await supabase
+    const { data: profile } = await userClient
       .from("profiles").select("credits").eq("id", req.user.id).single();
     if (!profile || profile.credits < 1)
       return res.status(402).json({ message: "Yetersiz kredi" });
@@ -286,12 +290,12 @@ const response = await genAI.models.generateContent({
       .from("user-uploads").getPublicUrl(resultFileName);
 
     // Önce üretilen görseli kayda ekliyoruz
-    await supabase.from("generations").insert({
+    await userClient.from("generations").insert({
       user_id: req.user.id, template_id: templateId, result_url: resultUrl,
     });
 
     // Görsel kaydı başarılıysa krediyi düşüyoruz
-    const { error: creditError } = await supabase.from("profiles").update({ credits: profile.credits - 1 }).eq("id", req.user.id);
+    const { error: creditError } = await userClient.from("profiles").update({ credits: profile.credits - 1 }).eq("id", req.user.id);
     
     if (creditError) {
       console.error('Kredi düşürülürken hata oluştu:', creditError);
@@ -313,7 +317,10 @@ const response = await genAI.models.generateContent({
 });
 
 app.get("/my-generations", authMiddleware, async (req, res) => {
-  const { data, error } = await supabase
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const userClient = getUserSupabase(token);
+  
+  const { data, error } = await userClient
     .from("generations").select("*, template:templates(*)")
     .eq("user_id", req.user.id).order("created_at", { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
