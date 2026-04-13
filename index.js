@@ -124,6 +124,22 @@ app.post("/auth/login", async (req, res) => {
   });
 });
 
+app.post("/auth/refresh", async (req, res) => {
+  const { refresh_token } = req.body;
+  if (!refresh_token) return res.status(400).json({ error: "Refresh token gerekli" });
+
+  const { data, error } = await supabase.auth.refreshSession({ refresh_token });
+  
+  if (error || !data.session) {
+    return res.status(401).json({ error: "Oturum yenilenemedi, tekrar giriş yapın" });
+  }
+
+  res.json({
+    token: data.session.access_token,
+    refresh_token: data.session.refresh_token,
+  });
+});
+
 app.get("/auth/me", authMiddleware, async (req, res) => {
   const token = req.headers.authorization?.replace("Bearer ", "");
   const userClient = getUserSupabase(token);
