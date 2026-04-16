@@ -269,7 +269,6 @@ app.post("/generate", authMiddleware, async (req, res) => {
           ],
           config: {
             responseModalities: ["TEXT", "IMAGE"],
-            httpOptions: { timeout: 300000 } // 5 dakika timeout (AbortError önlemek için)
           },
         });
         break; // Başarılı olursa döngüden çık
