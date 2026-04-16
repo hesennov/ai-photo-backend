@@ -305,13 +305,21 @@ app.post("/generate", authMiddleware, async (req, res) => {
     const { data: { publicUrl: resultUrl } } = supabase.storage
       .from("user-uploads").getPublicUrl(resultFileName);
 
-    // Önce üretilen görseli kayda ekliyoruz
-    await userClient.from("generations").insert({
+    // Görsel üretildi — artık admin client(service key) ile kayıt ve kredi düşme yapıyoruz.
+    // Kullanıcının JWT'si Gemini üretim süresi boyunca (30-90sn) süresi dolabileceğinden
+    // userClient kullanmak JWT expired hatasına yol açıyor.
+    const { error: insertError } = await supabase.from("generations").insert({
       user_id: req.user.id, template_id: templateId, result_url: resultUrl,
     });
+    if (insertError) {
+      console.error('Kayıt eklenirken hata:', insertError);
+    }
 
-    // Görsel kaydı başarılıysa krediyi düşüyoruz
-    const { error: creditError } = await userClient.from("profiles").update({ credits: profile.credits - 1 }).eq("id", req.user.id);
+    // Krediyi admin client ile düş (JWT sorununu bypass eder)
+    const { error: creditError } = await supabase
+      .from("profiles")
+      .update({ credits: profile.credits - 1 })
+      .eq("id", req.user.id);
     
     if (creditError) {
       console.error('Kredi düşürülürken hata oluştu:', creditError);
