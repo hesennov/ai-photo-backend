@@ -245,30 +245,45 @@ app.post("/generate", authMiddleware, async (req, res) => {
     if (templateError) return res.status(404).json({ error: "Template bulunamadı" });
 
     const promptText = `${template.prompt}. The person in the provided photo must appear in this scene. Keep their face, skin tone, and facial features exactly the same. Only change the background and environment.`;
-const response = await genAI.models.generateContent({
-  // Daha önce çalışan model ismini geri getiriyoruz
-  model: "gemini-3.1-flash-image-preview", 
-  
-  contents: [
-    {
-      parts: [
-        {
-          inlineData: {
-            mimeType: "image/jpeg",
-            data: userPhotoBase64, // Referans olarak aldığım kendi fotoğrafın
+    let response;
+    let retries = 3;
+    
+    while (retries > 0) {
+      try {
+        response = await genAI.models.generateContent({
+          model: "gemini-3.1-flash-image-preview", 
+          contents: [
+            {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: "image/jpeg",
+                    data: userPhotoBase64,
+                  },
+                },
+                { 
+                  text: promptText 
+                },
+              ],
+            },
+          ],
+          config: {
+            responseModalities: ["TEXT", "IMAGE"],
+            httpOptions: { timeout: 300000 } // 5 dakika timeout (AbortError önlemek için)
           },
-        },
-        { 
-          text: promptText // Yazdığın o detaylı Los Angeles/Camaro senaryosu
-        },
-      ],
-    },
-  ],
-  config: {
-    // Hem metin hem de görsel çıktısı alabilmek için gerekli ayar
-    responseModalities: ["TEXT", "IMAGE"],
-  },
-});
+        });
+        break; // Başarılı olursa döngüden çık
+      } catch (err) {
+        console.error(`Gemini API Hatası (Kalan deneme: ${retries - 1}):`, err.message);
+        if (err.name === 'AbortError' || err.message?.includes('abort') || err.message?.includes('timeout') || err.message?.includes('fetch failed')) {
+          retries--;
+          if (retries === 0) throw err; // Tüm denemeler bittiyse hatayı fırlat
+          await new Promise(res => setTimeout(res, 3000)); // 3 saniye bekle
+        } else {
+          throw err; // Başka türden bir hataysa hemen fırlat
+        }
+      }
+    }
 //   const response = await genAI.models.generateContent({
 //   model: "gemini-2.5-flash-image",
 //   contents: [
