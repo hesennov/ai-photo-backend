@@ -33,7 +33,6 @@ const getUserSupabase = (token) => {
 const genAI = new GoogleGenAI({ 
   apiKey: process.env.GEMINI_API_KEY,
   apiVersion: 'v1alpha',
-  httpOptions: { timeout: 300000 } // 5 dakika (Network timeout engellemek için)
 });
 const PLANS = {
   price_1TKkbPDuBL2btSu6jVpCyoKk: { credits: 25, name: 'Starter' },
@@ -246,12 +245,12 @@ app.post("/generate", authMiddleware, async (req, res) => {
 
     const promptText = `${template.prompt}. The person in the provided photo must appear in this scene. Keep their face, skin tone, and facial features exactly the same. Only change the background and environment.`;
     let response;
-    let retries = 3;
-    
-    while (retries > 0) {
+    let lastError;
+    for (let attempt = 1; attempt <= 3; attempt++) {
       try {
+        console.log(`Gemini istek denemesi: ${attempt}/3`);
         response = await genAI.models.generateContent({
-          model: "gemini-3.1-flash-image-preview", 
+          model: "gemini-2.0-flash-preview-image-generation",
           contents: [
             {
               parts: [
@@ -261,9 +260,7 @@ app.post("/generate", authMiddleware, async (req, res) => {
                     data: userPhotoBase64,
                   },
                 },
-                { 
-                  text: promptText 
-                },
+                { text: promptText },
               ],
             },
           ],
@@ -271,37 +268,18 @@ app.post("/generate", authMiddleware, async (req, res) => {
             responseModalities: ["TEXT", "IMAGE"],
           },
         });
-        break; // Başarılı olursa döngüden çık
+        console.log(`Gemini yanıt verdi (deneme ${attempt})`);
+        break;
       } catch (err) {
-        console.error(`Gemini API Hatası (Kalan deneme: ${retries - 1}):`, err.message);
-        if (err.name === 'AbortError' || err.message?.includes('abort') || err.message?.includes('timeout') || err.message?.includes('fetch failed')) {
-          retries--;
-          if (retries === 0) throw err; // Tüm denemeler bittiyse hatayı fırlat
-          await new Promise(res => setTimeout(res, 3000)); // 3 saniye bekle
-        } else {
-          throw err; // Başka türden bir hataysa hemen fırlat
+        lastError = err;
+        console.error(`Gemini hata (deneme ${attempt}/3):`, err.name, err.message);
+        if (attempt < 3) {
+          await new Promise(r => setTimeout(r, 2000));
         }
       }
     }
-//   const response = await genAI.models.generateContent({
-//   model: "gemini-2.5-flash-image",
-//   contents: [
-//     {
-//       parts: [
-//         {
-//           inlineData: {
-//             mimeType: "image/jpeg",
-//             data: userPhotoBase64,
-//           },
-//         },
-//         { text: promptText },
-//       ],
-//     },
-//   ],
-//   config: {
-//     responseModalities: ["TEXT", "IMAGE"],
-//   },
-// });
+    if (!response) throw lastError;
+
     const parts = response.candidates[0].content.parts;
     const imagePart = parts.find(p => p.inlineData);
 
