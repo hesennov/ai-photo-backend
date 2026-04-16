@@ -250,7 +250,7 @@ app.post("/generate", authMiddleware, async (req, res) => {
       try {
         console.log(`Gemini istek denemesi: ${attempt}/3`);
         response = await genAI.models.generateContent({
-          model: "gemini-2.0-flash-preview-image-generation",
+          model: "gemini-3.1-flash-image-preview",
           contents: [
             {
               parts: [
